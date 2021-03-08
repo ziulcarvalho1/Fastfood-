@@ -1,0 +1,954 @@
+---
+title: "Forecasting Food Sales for Fast Food Chain"
+author: 'Group 1: Luiz Carvalho, Manoj Soman Nair, Nafiseh Davari, Stanislav Taov'
+date: "16/02/2020"
+output:
+  pdf_document: default
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(dplyr)
+library(tidyr)
+library(moments)
+library(ggplot2)
+library(data.table)
+library(tidyverse)
+library(ggthemes)
+library(ggcorrplot)
+library(lubridate)
+library(caret)
+library(rpart)
+library(rpart.plot)
+
+
+df <- read.csv('data-06.csv')
+
+```
+
+## Abstract
+
+Based on many research papers we know that the weather has a strong influence on food sales as weather impacts the emotional state of people and can affect their purchase decisions. As a result, many retail food chains started using weather data to forecast short-term sales predictions to minimize stocked or expired products and avoid missing sales. In this study, we built a system to predict food sales for a fast-food in São Paulo, Brazil. We took into consideration, the temporal granularity of sales data, the input variables to use for predicting sales and the representation of the sales output variable. We were able to decide which machine learning algorithms suites better food sales prediction and used appropriate measures for evaluating their accuracy and showed success in predicting sales of some weather-sensitive products such as beverages.
+
+## Business problem
+
+In today’s highly competitive and constantly changing business environment, the accurate and timely estimation of future sales, also known as sales prediction or sales forecasting, can offer critical knowledge to companies involved in the manufacturing, wholesale or retail of products. Short-term predictions mainly help in production planning and stock management, while long-term predictions can help in business development decision making. In our specific case, we have a fast-food chain in Brazil with 400 stores with difficulty in predicting its short term production. 
+
+Sales prediction is particularly important for this particular company due to the short shelf-life of many of its products, which leads to loss of income in both shortage and surplus situations. Producing too many leads to waste of products, while producing too few leads to opportunity loss. Therefore we have a situation where predicting correctly how much you have to produce each item each day is important.
+
+Moreover, food consumer demand is constantly fluctuating due to factors such as price, promotions, changing consumer preferences or weather changes. Sales prediction is typically done arbitrarily by managers. However, skilled managers are hard to find and they are not always available. In our specific case, this forecast is done based on experience however it remains far from accurate. Average loss (too many or too few) spins around 10%.
+Here it is important to put the management perspective: It is their view today they rely too much on the managers and would like to have a computer system that can play the role of a skilled manager.  Over time the expectation was to have some tool that would free the company from human dependence. In addition, they believe that the level of error is high and could be reduced.
+
+Therefore, from the management perspective, a system capable of predicting the sales would be worth having even if at the beginning it doesn´t perform better than the current process. Equal performance would be acceptable. In addition to that, there was an understanding that the system would be able to improve its performance over time as more and more historical data is added to its reference database. 
+
+## Analytical problem
+
+The problem is how to build a model that effectively predicts the demand with a level of assertiveness equal or superior to the current one and improves over time. One way is to build such a system would be to model the expert knowledge of skilled managers within a computer system. Alternatively, we could exploit the wealth of sales data and related information to automatically construct accurate sales prediction models via machine learning techniques. The latter is a much simpler process, it is not biased from the particularities of a specific sales manager and it is dynamic, meaning it can adapt to changes in the data. Furthermore, it has the potential to outweigh the prediction accuracy of a human expert, who typically is imperfect.
+
+Nevertheless, we listened to the thoughts of the people currently in charge of making this forecast  and we were informed that they believe that the demand is correlated to the following factors:
+
+1)    Day of the month (payment days usually have bigger demand)
+2)    Day of the week (Fridays, Saturdays, Sundays and holidays usually have a big demand)
+3)    Month (Holidays months usually have bigger sales – In Brazil Dec-Jan-Jun-Jul)
+4)    Weather (temperature, rain and sun have an impact on what people eat)
+
+This particular company sells its food through several channels: 1) directly from its stores, 2) through a web deliver service and 3) through a call-center. In our study, we are not going to differentiate these channels just counting the total volume sold of each item each day.
+Here it is worth mentioning that the insigns provided by the people in charge of the process today should be seen with a grain of salt given the fact that they know that a system like that would be built to replace them.  Therefore all these assumptions must be checked against the hard data.
+
+## Datasets
+
+To be able to build our model we decided to use as a sales sample in the city of São Paulo which alone responds for almost 40% of the total sales. This is a simplifying strategy given the fact that if the process works for this city we can easily deploy it in the others.
+
+### Getting the Data
+
+Initially we have managed to get sales data by type of item for thirteen months (Jan – 2018 and Jan-2019) – 396 registers. 
+Secondly we managed to get the weather stations measurements in São Paulo for the whole year of 2018 and January of 2019. It is public information available at the website:
+
+http://www.inmet.gov.br/projetos/rede/pesquisa/
+In sequence we prepared this data crossing these two files unifying them by date. 
+
+## Data Evaluating
+
+Accuracy and completeness: A visual inspection showed that the sales data per day was basically correct, although some values seem to be too high or too low. The weather measurements had some problems of completeness. There were several days without the insolation, temperature and humidity recorded. In addition of that there are several days where the level of rain is zero, this is a problem because we don´t know it happens because it wasn´t recorded or because in fact didn´t rain in these days.
+
+## Data Dictionary
+
+Data – Day of the weather measurements and sales
+Precipitac – Volume of rain in millimetres per square meter during the day
+Tempmax – Max temperature during the day
+Tempmin – Minimum temperature during the day
+Tempmed – Average temperature during the day
+Umidade – Level of humidity in the air 
+Insolacao – Level of sun 
+Diasemana – day of the week abreviation
+Diasem – weight of the day of the week considering the average volumes sold
+Mes – Weight of the month considering the average sales volumes
+Desserts – number of desserts sold in the day
+Pizzas – Number of pizzas sold in the day
+Beverage – Number of Beverage sold in the day
+Cbmaker – Number of a special dish sold in the day
+Combos – Number of combos sold in the day
+Sfiha – Number of sfihas sold in the day
+kit1 – Number of kits 01 sold in the day (Is a dish with a gift)
+kit2 - Number of kits 02 sold in the day (Is a dish with a gift)
+snack – Number of snacks sold in the day
+pastas – Number of pastas sold in the day
+dishes – Number of lunches sold in the day
+promotion – Number of promotions sold in the day (This is episodic and may not be counted)
+savory – Number of savory sold in the day
+salads – Number of salads sold in the day
+total – Total number of items sold in the day
+
+
+
+
+## Data Exploration and Cleaning
+
+The meaning of the numbers in the field diasem  is:
+1)	Monday, Tuesday, Thursday
+2)	Friday
+3)	Saturday and Sunday
+4)	Holidays
+The number represents the weight of the day regards sales. This weight reflects the view of the current planners regards sales and we need to check if the assumption holds. Analyzing the sales per day of the week we have the following graphic:
+
+
+![](/Users/stantaov/123132.png)
+
+
+The current assumption of separating the days of week into four categories seems to be a bit wrong , the graphic shows three ranges as follows:
+1)	Monday – Tuesday – Wednesday-Thursday – Range  11% - 13% of the sales
+2)	Friday and Saturday – Range 17% and 19% of the sales
+3)	Sunday – Range 14% a 15% of the sales
+The holidays match the volumes of FRI and SAT falling into the Range 2.  The distribution by type of item goes as shown:
+
+![](/Users/stantaov/1231.png)
+
+
+Here we can see that the division of training data by type of the day would be better if done conjugate with the type of product, That means the variation in sales along the week is not uniform for all products.  We didn´t do that and surely it is an aspect of this model which can be improved. 
+Our analysis suggested  that we group the days by type as follows:
+
+1)    Monday – Tuesday – Wednesday-Thursday – Range  11% - 13% of the sales
+2)    Sunday – Range 14% a 15% of the sales
+3)    Friday and Saturday – Range 17% and 19% of the sales 
+
+The same process of grouping the days by sales profile was done for the months, the current method was as follows: 
+
+1)    March, April, May, August, September, October, November
+2)    February and July
+3)    January ,June and December
+
+The number represents the weight of the month regards sales, this weight reflects the view of the current planners regards sales and we checked if the assumption holds. Analyzing the actual sales monthly by month classification we saw the following:
+
+
+![](/Users/stantaov/12.png)
+
+
+That suggests that there is a differentiation among the months as follows:
+1)	1.500.000 items sold monthly (8,61% above the baseline)
+2)	1.380.000 items sold monthly (Baseline)
+3)	2.079.000 items sold (50% above the baseline)
+That suggests the change 1 with 2 as a classification for the month to keep it aligned with the sales volumes:
+1)	1.380.000 items sold monthly (Baseline)
+2)	1.500.000 items sold monthly (8,61% above the baseline)
+3)	2.079.000 items sold (50% above the baseline)
+
+As we can see, although the weather do have some influence regards the amount sold of each type of product the main aspects influencing the demand are the days of week and month of the year.
+Note that the objective is first to identify if the listed factors are in fact defining the demand and identify which ones are the most relevant.
+Establishing a correlation using the Kendall method between the demand for specific items. Here we are going to limit ourselves to the following items:
+Desserts – number of desserts sold in the day
+Pizzas – Number of pizzas sold in the day
+Beverage – Number of Beverage sold in the day
+Sfiha – Number of sfihas sold in the day
+snack – Number of snacks sold in the day
+pastas – Number of pastas sold in the day
+dishes – Number of lunches sold in the day
+savory – Number of savory sold in the day
+salads – Number of salads sold in the day
+
+The reason for that is the fact that the others are not regular items but some sort of promotion only made available for limited span of time. Items expurgated from the analysis:
+Cbmaker – Number of a special dish sold in the day
+Combos – Number of combos sold in the day
+kit1 – Number of kits 01 sold in the day (includes a gift)
+kit2 - Number of kits 02 sold in the day (Includes a gift)
+promotion – Number of promotions sold in the day (This is episodic and may not be counted)
+
+Seasonal parameters:
+
+Diasem – weight of the day of the week considering the average volumes sold (1,2 or 3)
+Mes – Weight of the month considering the average sales volumes (1,2 or 3)
+
+We managed to see the correlation between the day of the week and month and the consumption of the several items:
+
+![](/Users/stantaov/13.png)
+
+As we can see the consumption of some items varies more them others as the days of the week change. 
+ 
+Now we have to see if there  is a correlation between the weather factors and the consumption by item:
+
+Precipitac – Volume of rain in millimetres per square meter during the day
+Tempmax – Max temperature during the day
+Tempmin – Minimum temperature during the day
+Tempmed – Average temperature during the day
+Umidade – Level of humidity in the air 
+Insolacao – Level of sun 
+
+Remembering that doing the correlation we are going to identify the variable R which can vary from +1 to -1 indicating that a relationship exists between the two variables from absolute direct correlation (+1), no correlation (0) to inverse correlation (-1).  Using R studio and the command “corrplot” we managed to see the following:
+
+
+![](/Users/stantaov/11.png)
+
+As we can see in the graphics there is some correlation between weather parameters and consumption. However, the weather conditions are not so determining as the day of the week and the month of the year.
+
+Therefore building a model to guess the demand will imply the definition of the average demand of the day of the week in a given month and in sequence adjust this demand by the weather conditions.
+
+To archive that we grouped the demand by the combination of the type of day vs type of month with nine categories:
+
+![](/Users/stantaov/22.png)
+
+This analysis grouped the data as follows:
+
+![](/Users/stantaov/33.png)
+
+This would be the demand if only these two factors were influencing the actual sales, therefore the challenge is to identify how the weather conditions make the average demand deviate (up and down) from these values baseline factors.
+
+## Identifying the demand
+
+Once we sliced the dataset by type of week and type of month we have to identify which one of the six weather parameters is more influential in adjusting the demand for each item (nine types).
+
+To be able to do that we have to identify the correlation factor R² between each weather parameter and the volume sold. The factor with bigger R² is the ones to be used as “predictor” of the demand. We are going to use linear regression to predict the demand, identifying the parameters A and B in the formula Ax + B = Y where x is the chosen weather parameter and Y de expected demand for the product. This calculation will be done for each one of the nine types of products. For each row in the data_test we do the following combinations of tests:
+
+![](/Users/stantaov/44.png)
+
+![](/Users/stantaov/15.png)
+
+
+```{r glimpse}
+glimpse(df)
+```
+There are many columns with zero values
+Dropping all columns with zero values 
+```{r drop}
+df$cbmaker   <- NULL
+df$combos    <- NULL
+df$kit2      <- NULL
+df $kit1      <- NULL
+df $promotion <- NULL
+df $dessert1 <- NULL
+df $desserte <- NULL
+df $pizzas1 <- NULL
+df $pizzase <- NULL
+df $beverage1 <- NULL
+df $beveragee <- NULL
+df $cbmaker1 <- NULL
+df $cbmakere <- NULL
+df $combos1 <- NULL
+df $sfiha1 <- NULL
+df $sfihae <- NULL
+df $kit21 <- NULL
+df $kit11 <- NULL
+df $kit1e <- NULL
+df $combose <- NULL
+df $kit2e <- NULL
+df $snack1 <- NULL
+df $snacke <- NULL
+df $pastas1 <- NULL
+df $pastase <- NULL
+df $dishes1 <- NULL
+df $dishese <- NULL
+df $promotion1 <- NULL
+df $promotione <- NULL
+df $savory1 <- NULL
+df $savorye <- NULL
+df $salads1 <- NULL
+df $saladse <- NULL
+df $web <- NULL
+df $ifood <- NULL
+df $call <- NULL
+df $android <- NULL
+df $iphone <- NULL
+df $classe <- NULL
+```
+
+
+```{r df}
+head(df)
+```
+
+To deal with the inconsistencies we defined three strategies:
+
+1)    Regards the missing values in precipitation we managed to see the average rain in each month (public information) and check it against the sum of each day/month in the database. Through this process, we managed to identify that in fact, the zero represented days without rain (the data was right).
+
+2)    The registers with temperature min, max or medium and humidity equal zero were filled with the mean of these parameters (just two samples fall into this scenario).
+
+3)    In the case of the sun intensity, we had a situation where 196 out of 396 samples were equal zero. Considering that there is no possibility that the sun didn´t appear for so many days it was assumed we had a problem with the data. We managed to check the average sun intensity per month in the city of São Paulo (public information) and fill the gaps manually. Subsequently, we identify that the mean of the registers with measurement represents the average therefore it was possible to implement a code to correct it automatically.
+
+4)    The values of sales that diverge too much from what is typical were treaded by a bell distribution were the values whose frequency were smaller than 1% were eliminated from the sample. Note that we did not eliminate the whole row ( Each row had sales for each one of the eight types of products) we just didn´t count the line when predicting the specific item.  
+
+The evaluation was important because allowed us to create a cleaning layer in the R code where we check these factors (2 and 3) and adjust it automatically – It is important because we assume that a new samples will be added to the training data as time goes by and this new data probably will suffer from the same problems.
+
+
+Here we check if the columns tempmin, tempmax, tempmed, humidit and insulation are 0. If they are we replace the value for the mean
+
+      tempmax    <-data[[11]]
+      tempmin    <-data[[12]]
+      tempmed    <-data[[13]]
+      umidade    <-data[[14]]
+      insolacao  <-data[[15]]
+      
+      media1 <- mean(tempmax,   trim = 0, na.rm = TRUE)
+      media2 <- mean(tempmin,   trim = 0, na.rm = TRUE)
+      media3 <- mean(tempmed,   trim = 0, na.rm = TRUE)
+      media4 <- mean(umidade,   trim = 0, na.rm = TRUE)
+      media5 <- mean(insolacao, trim = 0, na.rm = TRUE)
+
+```{r missing}
+sum(is.na(df))
+```
+There are no missing values
+
+
+```{r summary}
+summary(df)
+```
+It seems some columns have outliers. By plotting whisker plots for each product we can observe outliers more closely.
+
+Plotting boxplots for desserts
+
+```{r desserts, echo=FALSE}
+
+ggplot(df , aes(factor(diasemana), desserts)) + 
+  geom_boxplot(aes(fill =factor(diasemana))) + 
+  theme(legend.title=element_text(family="Helvetica",size=20), 
+        legend.text=element_text(family="Helvetica",face ="italic",size=15), 
+        plot.title=element_text(family="Helvetica", face="bold", size=20), 
+        axis.title.x=element_text(family="Helvetica", face="bold", size=12), 
+        axis.title.y=element_text(family="Helvetica", face="bold", size=12)) + 
+  xlab("Day") +
+  ylab("Amount Sold") +
+  theme(legend.position = "none") +
+  ggtitle("Sales of Desserts (by Day)")
+
+```
+
+There are some spikes in sales during certain days (Friday, Saturday, Sunday) and other days have lower sales but with many outliers.
+
+Plotting boxplots for pizzas
+
+```{r pizzas, echo=FALSE}
+
+ggplot(df , aes(factor(diasemana), pizzas)) + 
+  geom_boxplot(aes(fill =factor(diasemana))) + 
+  theme(legend.title=element_text(family="Helvetica",size=20), 
+        legend.text=element_text(family="Helvetica",face ="italic",size=15), 
+        plot.title=element_text(family="Helvetica", face="bold", size=20), 
+        axis.title.x=element_text(family="Helvetica", face="bold", size=12), 
+        axis.title.y=element_text(family="Helvetica", face="bold", size=12)) + 
+  xlab("Day") +
+  ylab("Amount Sold") +
+  theme(legend.position = "none") +
+  ggtitle("Sales of Pizzas (by Day)")
+
+```
+
+Pizza sales seem very spread with a lot of outliers, we will explore it more closely. 
+
+```{r skewness, echo=FALSE}
+skewness(df$pizzas)
+```
+Pizza column has negative skewness of 3.74455
+```{r hist}
+
+hist(df$pizzas)
+
+```
+
+As we can see the average daily number of pizza sales is somewhere around 300 pizzas and there are a lot of outliers with over 5000 sales per day.
+
+Plotting boxplots for beverage
+
+```{r beverage, echo=FALSE}
+
+ggplot(df , aes(factor(diasemana), beverage)) + 
+  geom_boxplot(aes(fill =factor(diasemana))) + 
+  theme(legend.title=element_text(family="Helvetica",size=20), 
+        legend.text=element_text(family="Helvetica",face ="italic",size=15), 
+        plot.title=element_text(family="Helvetica", face="bold", size=20), 
+        axis.title.x=element_text(family="Helvetica", face="bold", size=12), 
+        axis.title.y=element_text(family="Helvetica", face="bold", size=12)) + 
+  xlab("Day") +
+  ylab("Amount Sold") +
+  theme(legend.position = "none") +
+  ggtitle("Sales of Beverage (by Day)")
+
+```
+
+Beverage sales are quite spread. Again more sales happened on Friday, Saturday, Sunday.
+
+Plotting boxplots for sfiha
+
+```{r sfiha, echo=FALSE}
+
+ggplot(df , aes(factor(diasemana), sfiha)) + 
+  geom_boxplot(aes(fill =factor(diasemana))) + 
+  theme(legend.title=element_text(family="Helvetica",size=20), 
+        legend.text=element_text(family="Helvetica",face ="italic",size=15), 
+        plot.title=element_text(family="Helvetica", face="bold", size=20), 
+        axis.title.x=element_text(family="Helvetica", face="bold", size=12), 
+        axis.title.y=element_text(family="Helvetica", face="bold", size=12)) + 
+  xlab("Day") +
+  ylab("Amount Sold") +
+  theme(legend.position = "none") +
+  ggtitle("Sales of Sfiha (by Day)")
+
+```
+
+More sfiha sales happened on Friday and Saturday, some days have outliers.
+
+#Plotting boxplots for snack
+
+```{r snack, echo=FALSE}
+
+ggplot(df , aes(factor(diasemana), snack)) + 
+  geom_boxplot(aes(fill =factor(diasemana))) + 
+  theme(legend.title=element_text(family="Helvetica",size=20), 
+        legend.text=element_text(family="Helvetica",face ="italic",size=15), 
+        plot.title=element_text(family="Helvetica", face="bold", size=20), 
+        axis.title.x=element_text(family="Helvetica", face="bold", size=12), 
+        axis.title.y=element_text(family="Helvetica", face="bold", size=12)) + 
+  xlab("Day") +
+  ylab("Amount Sold") +
+  theme(legend.position = "none") +
+  ggtitle("Sales of Snack (by Day)")
+
+```
+
+More snack sales happened on Saturday, Sunday and Friday and Tuesday, Monday and Thursday have most outliers
+
+Plotting boxplots for pastas
+
+```{r pastas, echo=FALSE}
+
+ggplot(df , aes(factor(diasemana), pastas)) + 
+  geom_boxplot(aes(fill =factor(diasemana))) + 
+  theme(legend.title=element_text(family="Helvetica",size=20), 
+        legend.text=element_text(family="Helvetica",face ="italic",size=15), 
+        plot.title=element_text(family="Helvetica", face="bold", size=20), 
+        axis.title.x=element_text(family="Helvetica", face="bold", size=12), 
+        axis.title.y=element_text(family="Helvetica", face="bold", size=12)) + 
+  xlab("Day") +
+  ylab("Amount Sold") +
+  theme(legend.position = "none") +
+  ggtitle("Sales of Pastas (by Day)")
+
+```
+
+More sales of pasta happened on Sunday, very interesting. 
+
+Plotting boxplots for dishes
+
+```{r dishes, echo=FALSE}
+
+ggplot(df , aes(factor(diasemana), dishes)) + 
+  geom_boxplot(aes(fill =factor(diasemana))) + 
+  theme(legend.title=element_text(family="Helvetica",size=20), 
+        legend.text=element_text(family="Helvetica",face ="italic",size=15), 
+        plot.title=element_text(family="Helvetica", face="bold", size=20), 
+        axis.title.x=element_text(family="Helvetica", face="bold", size=12), 
+        axis.title.y=element_text(family="Helvetica", face="bold", size=12)) + 
+  xlab("Day") +
+  ylab("Amount Sold") +
+  theme(legend.position = "none") +
+  ggtitle("Sales of Dishes (by Day)")
+
+```
+Very similar to sales of snacks 
+
+Plotting boxplots for savory
+
+```{r savory, echo=FALSE}
+
+ggplot(df , aes(factor(diasemana), savory)) + 
+  geom_boxplot(aes(fill =factor(diasemana))) + 
+  theme(legend.title=element_text(family="Helvetica",size=20), 
+        legend.text=element_text(family="Helvetica",face ="italic",size=15), 
+        plot.title=element_text(family="Helvetica", face="bold", size=20), 
+        axis.title.x=element_text(family="Helvetica", face="bold", size=12), 
+        axis.title.y=element_text(family="Helvetica", face="bold", size=12)) + 
+  xlab("Day") +
+  ylab("Amount Sold") +
+  theme(legend.position = "none") +
+  ggtitle("Sales of Savory (by Day)")
+
+```
+
+Plotting boxplots for salads 
+
+```{r salads, echo=FALSE}
+
+ggplot(df , aes(factor(diasemana), salads)) + 
+  geom_boxplot(aes(fill =factor(diasemana))) + 
+  theme(legend.title=element_text(family="Helvetica",size=20), 
+        legend.text=element_text(family="Helvetica",face ="italic",size=15), 
+        plot.title=element_text(family="Helvetica", face="bold", size=20), 
+        axis.title.x=element_text(family="Helvetica", face="bold", size=12), 
+        axis.title.y=element_text(family="Helvetica", face="bold", size=12)) + 
+  xlab("Day") +
+  ylab("Amount Sold") +
+  theme(legend.position = "none") +
+  theme(legend.position = "none") +
+  ggtitle("Sales of Salads (by Day of the Week)")
+
+```
+
+Sales of salads relatively low and consistent and have a few outliers.
+
+### Let's make boxplots using the month of the year
+
+```{r month, echo=FALSE}
+date <- df$data
+months <- month(as.POSIXlt(date, format="%d/%m/%Y"))
+sum(is.na(months))
+months[is.na(months)] <- 1
+df$month  <- months
+head(df)
+```
+
+Plotting boxplots for desserts/month
+
+```{r desserts_m, echo=FALSE}
+
+ggplot(df , aes(factor(month), desserts)) + 
+  geom_boxplot(aes(fill =factor(month))) + 
+  theme(legend.title=element_text(family="Helvetica",size=20), 
+        legend.text=element_text(family="Helvetica",face ="italic",size=15), 
+        plot.title=element_text(family="Helvetica", face="bold", size=20), 
+        axis.title.x=element_text(family="Helvetica", face="bold", size=12), 
+        axis.title.y=element_text(family="Helvetica", face="bold", size=12)) + 
+  xlab("Month") +
+  ylab("Amount Sold (by Month)") +
+  theme(legend.position = "none") +
+  ggtitle("Sales of Desserts (by Month)")
+
+```
+
+December shows some outliers, lowest months are December, January and February.
+
+Plotting boxplots for pizzas/month
+
+```{r pizzas_m, echo=FALSE}
+
+ggplot(df , aes(factor(month), pizzas)) + 
+  geom_boxplot(aes(fill =factor(month))) + 
+  theme(legend.title=element_text(family="Helvetica",size=20), 
+        legend.text=element_text(family="Helvetica",face ="italic",size=15), 
+        plot.title=element_text(family="Helvetica", face="bold", size=20), 
+        axis.title.x=element_text(family="Helvetica", face="bold", size=12), 
+        axis.title.y=element_text(family="Helvetica", face="bold", size=12)) + 
+  xlab("Month") +
+  ylab("Amount Sold (by Month)") +
+  theme(legend.position = "none") +
+  ggtitle("Sales of Pizzas (by Month)")
+
+```
+
+Pizza sales had a huge spike in sales in April, but why? Let's explore...
+
+```{r april}
+
+april <- df %>% 
+  filter(month == 4)
+head(april$pizzas, n = 30)
+
+```
+
+```{r april_pot, echo=FALSE}
+
+ggplot(april, aes(x=data, y=pizzas, group =1, color = "red")) +
+  geom_line() + 
+  theme(legend.position = "none") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+```
+
+There were sales spikes between April 13 - 15, April 20 - 22 and April 27 - 29, seems like those days are Friday, Saturday and Sunday. We couldn't find any publicly available information on events that can trigger these sales spikes. We think that the company might have been running promotions that included pizzas.
+
+Plotting boxplots for beverage/month and average temperature of the month
+
+```{r beverage_pot, , echo=FALSE}
+
+ggplot(df , aes(factor(month), beverage)) + 
+  geom_boxplot(aes(fill =factor(month))) + 
+  theme(legend.title=element_text(family="Helvetica",size=20), 
+        legend.text=element_text(family="Helvetica",face ="italic",size=15), 
+        plot.title=element_text(family="Helvetica", face="bold", size=20), 
+        axis.title.x=element_text(family="Helvetica", face="bold", size=12), 
+        axis.title.y=element_text(family="Helvetica", face="bold", size=12)) + 
+  xlab("Month") +
+  ylab("Amount Sold (by Month)") +
+  theme(legend.position = "none") +
+  ggtitle("Sales of Beverages (by Month)")
+
+```
+
+```{r tempmed, , echo=FALSE}
+
+avg.month.temp <- aggregate(tempmed ~ month, df, mean)
+
+```
+
+```{r month.temp, , echo=FALSE}
+
+ggplot(avg.month.temp, aes(x=month, y=tempmed, group =1, color = "red")) +
+  geom_line() + 
+  theme(legend.title=element_text(family="Helvetica",size=20), 
+        legend.text=element_text(family="Helvetica",face ="italic",size=15), 
+        plot.title=element_text(family="Helvetica", face="bold", size=20), 
+        axis.title.x=element_text(family="Helvetica", face="bold", size=12), 
+        axis.title.y=element_text(family="Helvetica", face="bold", size=12)) + 
+  theme(legend.position = "none") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+```
+
+It seems like beverage and temperature has a strong correlation. 
+
+Plotting boxplots for sfiha/month
+
+```{r month.sfiha, , echo=FALSE}
+
+ggplot(df , aes(factor(month), sfiha)) + 
+  geom_boxplot(aes(fill =factor(month))) + 
+  theme(legend.title=element_text(family="Helvetica",size=20), 
+        legend.text=element_text(family="Helvetica",face ="italic",size=15), 
+        plot.title=element_text(family="Helvetica", face="bold", size=20), 
+        axis.title.x=element_text(family="Helvetica", face="bold", size=12), 
+        axis.title.y=element_text(family="Helvetica", face="bold", size=12)) + 
+  xlab("Month") +
+  ylab("Amount Sold (by Month)") +
+  theme(legend.position = "none") +
+  ggtitle("Sales of Sfiha (by Month)")
+
+```
+
+Sfiha sales had a few outliers in a certain month, sales month over month look stable and follows temperature trend.
+
+Plotting boxplots for snack/month
+
+```{r month.snack, , echo=FALSE}
+
+ggplot(df , aes(factor(month), snack)) + 
+  geom_boxplot(aes(fill =factor(month))) + 
+  theme(legend.title=element_text(family="Helvetica",size=20), 
+        legend.text=element_text(family="Helvetica",face ="italic",size=15), 
+        plot.title=element_text(family="Helvetica", face="bold", size=20), 
+        axis.title.x=element_text(family="Helvetica", face="bold", size=12), 
+        axis.title.y=element_text(family="Helvetica", face="bold", size=12)) + 
+  xlab("Month") +
+  ylab("Amount Sold (by Month)") +
+  theme(legend.position = "none") +
+  ggtitle("Sales of Snack (by Month)")
+
+```
+
+Plotting boxplots for pastas/month
+
+```{r month.pastas, , echo=FALSE}
+
+ggplot(df , aes(factor(month), pastas)) + 
+  geom_boxplot(aes(fill =factor(month))) + 
+  theme(legend.title=element_text(family="Helvetica",size=20), 
+        legend.text=element_text(family="Helvetica",face ="italic",size=15), 
+        plot.title=element_text(family="Helvetica", face="bold", size=20), 
+        axis.title.x=element_text(family="Helvetica", face="bold", size=12), 
+        axis.title.y=element_text(family="Helvetica", face="bold", size=12)) + 
+  xlab("Month") +
+  ylab("Amount Sold (by Month)") +
+  theme(legend.position = "none") +
+  ggtitle("Sales of Pastas (by Month)")
+
+```
+
+Plotting boxplots for dishes/month
+
+```{r month.dishes, , echo=FALSE}
+
+ggplot(df , aes(factor(month), dishes)) + 
+  geom_boxplot(aes(fill =factor(month))) + 
+  theme(legend.title=element_text(family="Helvetica",size=20), 
+        legend.text=element_text(family="Helvetica",face ="italic",size=15), 
+        plot.title=element_text(family="Helvetica", face="bold", size=20), 
+        axis.title.x=element_text(family="Helvetica", face="bold", size=12), 
+        axis.title.y=element_text(family="Helvetica", face="bold", size=12)) + 
+  xlab("Month") +
+  ylab("Amount Sold (by Month)") +
+  theme(legend.position = "none") +
+  ggtitle("Sales of Dishes (by Month)")
+
+```
+
+Plotting boxplots for savory/month
+
+```{r month.savory, , echo=FALSE}
+
+ggplot(df , aes(factor(month), savory)) + 
+  geom_boxplot(aes(fill =factor(month))) + 
+  theme(legend.title=element_text(family="Helvetica",size=20), 
+        legend.text=element_text(family="Helvetica",face ="italic",size=15), 
+        plot.title=element_text(family="Helvetica", face="bold", size=20), 
+        axis.title.x=element_text(family="Helvetica", face="bold", size=12), 
+        axis.title.y=element_text(family="Helvetica", face="bold", size=12)) + 
+  xlab("Month") +
+  ylab("Amount Sold (by Month)") +
+  theme(legend.position = "none") +
+  ggtitle("Sales of Savory (by Month)")
+
+```
+
+Savory slaes follow temperature trend as well.
+
+Plotting boxplots for salads/month
+
+```{r month.salads, , echo=FALSE}
+
+ggplot(df , aes(factor(month), salads)) + 
+  geom_boxplot(aes(fill =factor(month))) + 
+  theme(legend.title=element_text(family="Helvetica",size=20), 
+        legend.text=element_text(family="Helvetica",face ="italic",size=15), 
+        plot.title=element_text(family="Helvetica", face="bold", size=20), 
+        axis.title.x=element_text(family="Helvetica", face="bold", size=12), 
+        axis.title.y=element_text(family="Helvetica", face="bold", size=12)) + 
+  xlab("Month") +
+  ylab("Amount Sold (by Month)") +
+  theme(legend.position = "none") +
+  ggtitle("Sales of Salads (by Month)")
+
+```
+
+Sales of salads were declining month over month. 
+
+
+## Removing Outliers
+
+Removing outliers for desserts
+
+```{r desserts.out}
+
+desserts_c <- df$desserts 
+qnt <- quantile(desserts_c, probs=c(.25, .75), na.rm = T)
+caps <- quantile(desserts_c, probs=c(.05, .95), na.rm = T)
+H <- 1.5 * IQR(desserts_c, na.rm = T)
+desserts_c[desserts_c > (qnt[1] + H)] <- caps[1]
+desserts_c[desserts_c < (qnt[2] - H)] <- caps[2]
+df$desserts_c <- desserts_c
+
+boxplot(desserts_c)
+```
+
+Removing outliers for beverage
+
+```{r beverage .out}
+
+beverage_c <- df$beverage 
+qnt <- quantile(beverage_c, probs=c(.25, .75), na.rm = T)
+caps <- quantile(beverage_c, probs=c(.05, .95), na.rm = T)
+H <- 1.5 * IQR(beverage_c, na.rm = T)
+beverage_c[beverage_c > (qnt[1] + H)] <- caps[1]
+beverage_c[beverage_c < (qnt[2] - H)] <- caps[2]
+boxplot(beverage_c)
+
+```
+
+Removing outliers for sfiha
+
+```{r sfiha.out}
+
+sfiha_c <- df$sfiha
+min(sfiha_c) 
+sfiha_c[sfiha_c ==  5164] <- 26774.38
+sfiha_c[sfiha_c ==  7892] <- 26774.38
+qnt <- quantile(sfiha_c, probs=c(.25, .75), na.rm = T)
+caps <- quantile(sfiha_c, probs=c(.05, .95), na.rm = T)
+head(qnt)
+head(caps)
+H <- 1.5 * IQR(sfiha_c, na.rm = T)
+sfiha_c[sfiha_c > (qnt[1] + H)] <- caps[1]
+sfiha_c[sfiha_c < (qnt[2] - H)] <- caps[2]
+boxplot(sfiha_c)
+
+```
+
+```{r pastas.out}
+
+pastas_c <- df$pastas 
+qnt <- quantile(pastas_c, probs=c(.25, .75), na.rm = T)
+caps <- quantile(pastas_c, probs=c(.05, .95), na.rm = T)
+H <- 2 * IQR(pastas_c, na.rm = T)
+pastas_c[pastas_c > (qnt[1] + H)] <- caps[1]
+pastas_c[pastas_c < (qnt[2] - H)] <- caps[2]
+df$beverage_c <- beverage_c
+boxplot(pastas_c)
+
+```
+
+
+
+Converting diasemana to numbers
+
+```{r days}
+
+df$day_number <- recode(df$diasemana, 
+                        "SUN"= 0,
+                        "MON"= 1,
+                        "TUE"= 2,
+                        "WED"= 3,
+                        "TUR"= 4,
+                        "FRI"= 5,
+                        "SAT"= 6)
+
+```
+
+
+### Models
+
+Splitting data train and test %80 and %20
+
+```{r Tree Model}
+
+date.copy <- df
+data.split <- createDataPartition(date.copy$total, p=0.8, list = F)
+train <- date.copy[data.split, ]
+test <- date.copy[-data.split, ]
+
+dim(train)
+dim(test)
+
+train.copy <- train
+test.copy <- test
+
+```
+
+### Decision Tree Model
+
+```{r decision.tree.model}
+set.seed(2020)
+decision.tree.model <- rpart(desserts_c ~ precipitac + tempmax + tempmin + tempmed + umidade + insolacao 
+                             + month + day_number, data=train.copy)
+```
+
+```{r decision.tree.model.rpart.plot}
+rpart.plot(decision.tree.model)
+```
+
+Let's predict desserts using 
+
+```{r predict.decision.tree.model}
+predict.decision.tree.model <- predict(decision.tree.model, test.copy)
+```
+
+```{r RMSE}
+RMSE <- RMSE(pred = predict.decision.tree.model, obs = test.copy$desserts_c)
+RMSE/mean(desserts_c)*100
+```
+
+This model gives error around 21%.
+
+### Bagging Model
+
+
+
+Let's predict beverages
+```{r bagged_cv}
+set.seed(2020)
+cross.validation <- trainControl(method='cv', number=10)
+
+bagged_cv <- train(
+  beverage_c ~ precipitac + tempmax + tempmin + tempmed + umidade + insolacao + month + day_number,
+  data = train.copy,
+  method = "treebag",
+  trControl = cross.validation,
+  importance = TRUE
+)
+
+bagged_cv
+```
+
+Checking importance of features 
+
+```{r varImp}
+plot(varImp(bagged_cv), 8) 
+```
+
+It seems like precipitation does not impact sales of beverages
+
+```{r bagged_cv2}
+predict.bagged <- predict(bagged_cv, test.copy)
+```
+
+```{r RMSE2}
+RMSE <- RMSE(predict.bagged, test.copy$beverage_c)
+RMSE/mean(beverage_c)*100
+```
+
+This model gives error around 21%.
+
+### Random Forest Model
+
+```{r Random Forest Model}
+set.seed(2020)
+library(randomForest) 
+random.forest.model <- randomForest(desserts_c ~ precipitac + tempmax + tempmin 
+                                    + tempmed + umidade + insolacao + day_number + month, data = train.copy)
+
+random.forest.model
+
+which.min(random.forest.model$mse)
+
+sqrt(random.forest.model$mse[which.min(random.forest.model$mse)])
+
+predict.random.forest <- predict(random.forest.model, data = test.copy)
+```
+
+```{r RMSE3}
+RMSE <- RMSE(predict.random.forest, test.copy$desserts_c)
+RMSE/mean(desserts_c)*100
+```
+
+This model gives error around 37%.
+
+## The results
+
+After running all models we picked a linear regression since it gives a lower margin of error. When analyzing how we should evaluate the results at the beginning the answer seemed to be very straight forward: How many times the system got the prediction right. However, thinking a bit more some additional considerations appear:
+
+1)    Very unlikely that the prediction would be exactly right (How far from the mark seems to be the best measure.
+
+2)    We have nine predictions per cycle and have several cycles (Each day is a cycle in this context), how many times it got within a giving limit seems to be the best measurement.
+
+3)    We have a current process to compare with, how many times it got better than the current one.
+
+With all this in mind we produced the following spreadsheet:
+
+![](/Users/stantaov/4545.png)
+
+As we can see the system got an uneven performance, being much better predicting some types of products, than others. In general this first version didn´t perform better than the manual process today in place.
+
+
+## What could be done to improve the results
+
+Analyzing the results we start understanding the reasons why the performance wasn´t the one we expected. We identified at least four initiatives which if taken surely would improve the results :
+
+1)    We are segmenting the training data by type of day and type of month, doing that we create training subsets which sometimes were very small: E.g. the combination type of day 2 (Sunday) and month 2 (Dec and June) have only 8 samples (maybe less if part of them were segmented to the test data). Adding more historical data to the training data surely will improve system performance. This problem tends to be solved over time as new data is added to the system. 
+
+2)    There is a problem with some of the sales volumes of our sample. Some products have completely abnormal volumes of sales (too high or too low). We did coded a Bell-curve tail with the objective of expurgating the samples which would distort the results. However, giving problem 1 (lack of samples) we were unable to eliminate the adequate number of such cases; otherwise, we would end up with even fewer samples.
+
+3)    We believe that there is some cross-correlation between the weather parameters which may be more effective as predictors than the parameters themselves. Due time constraints we didn’t explore this avenue.
+
+A secondary issue that may or may not have relevance in this process is the bias regards under-producing.   We realized that real sales may hide a demand which wasn´t met due to the unavailability of products. That means we may have a day with an unusually low sales of a specific product. We don´t know and didn´t figure out a way of guessing how frequently this phenomenon may happen. 
+
+
+
+
+
+

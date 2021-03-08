@@ -1,0 +1,32 @@
+USE "c:\curso-ml\assignment-1\total-geral1.dbf" EXCLUSIVE
+go bottom
+store recno() to rec
+go top
+sum precipitac to tprecipitac
+sum tempmax   to ttempmax
+sum tempmin   to ttempmin
+sum tempmed   to ttempmed
+sum umidade   to tumidade
+sum insolacao to tinsolacao
+store tprecipitac/rec to media1
+store ttempmax/rec    to media2
+store ttempmin/rec    to media3
+store ttempmed/rec    to media4
+store tumidade/rec    to media5
+store tinsolacao/rec  to media6
+replace all precipita1 with 0
+replace all tempmax1   with 0
+replace all tempmin1    with 0
+replace all tempmed1    with 0
+replace all umidade1    with 0
+replace all insolacao1  with 0
+? media1,media2,media3,media4,media5,media6
+count for precipitac>media1*1.40 .or. precipitac<media1*0.60 to y
+? y
+replace all precipita1 with 1 for precipitac>media1*1.40 .or. precipitac<media1*0.60
+replace all tempmax1    with 1 for tempmax>media2*1.40    .or. tempmax<media2*0.60
+replace all tempmin1    with 1 for tempmin>media3*1.40    .or. tempmin<media3*0.60
+replace all tempmed1    with 1 for tempmed>media4*1.40    .or. tempmed<media4*0.60
+replace all umidade1    with 1 for umidade>media5*1.40    .or. umidade<media5*0.60
+replace all insolacao1    with 1 for insolacao>media6*1.40    .or. insolacao<media6*0.60
+
